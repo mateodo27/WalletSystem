@@ -16,12 +16,6 @@ namespace WalletSystem.Data.Model
 
         public DateTime CreatedDate { get; set; }
 
-        public string EncryptedPassword { get; set; }
-
-        public string DecryptedPassword { get; set; }
-
-        public byte[] Version { get; set; }
-
         public List<Transaction> Transactions { get; set; } 
 
         public bool HasTransactions => Transactions != null && Transactions.Count > 0;

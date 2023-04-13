@@ -340,7 +340,6 @@ namespace WalletSystem
             try
             {
                 accountService.Deposit(account, amount);
-                accountService.RefreshBalance(account);
 
                 DisplayVerbiageWithPause($"Your final balance is : {account.Balance:n}");
             }
@@ -395,7 +394,6 @@ namespace WalletSystem
             try
             {
                 accountService.Withdraw(account, amount);
-                accountService.RefreshBalance(account);
 
                 DisplayVerbiageWithPause($"Your final balance is : {account.Balance:n}");
             }
@@ -486,7 +484,6 @@ namespace WalletSystem
             try
             {
                 accountService.TransferFunds(account, receivingAccount, amount);
-                accountService.RefreshBalance(account);
 
                 DisplayVerbiageWithPause($"Your final balance is : {account.Balance:n}");
             }

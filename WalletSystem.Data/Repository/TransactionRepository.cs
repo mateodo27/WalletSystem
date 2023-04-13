@@ -4,6 +4,7 @@ using System.Configuration;
 using System.Data;
 using System.Data.Common;
 using System.Data.SqlClient;
+using System.Security.Principal;
 using System.Text;
 using System.Threading.Tasks;
 using System.Transactions;
@@ -23,119 +24,198 @@ namespace WalletSystem.Data.Repository
 
         public void Deposit(Account account, decimal amount)
         {
-            var query = @"EXEC [dbo].[usp_Deposit] @AccountNo, @Balance, @RowVersion, @Amount";
-
             using (var connection = new SqlConnection(_connectionString))
-            using (var command = new SqlCommand(query, connection))
             {
-                try
-                {
-                    connection.Open();
+                connection.Open();
 
-                    command.Parameters.AddWithValue("@AccountNo", account.AccountNo);
-                    command.Parameters.AddWithValue("@Balance", account.Balance);
-                    command.Parameters.AddWithValue("@RowVersion", account.Version);
-                    command.Parameters.AddWithValue("@Amount", amount);
-
-                    var rows = command.ExecuteNonQuery();
-                }
-                catch (Exception ex)
+                using (var transaction = connection.BeginTransaction(System.Data.IsolationLevel.Serializable))
                 {
-                    if (ex.Message == "Data has been modified")
+                    try
                     {
-                        throw new DBConcurrencyException(ex.Message);
+                        GetAccount(account, connection, transaction);
+
+                        var newBalance = account.Balance + amount;
+
+                        UpdateBalance(account, newBalance, connection, transaction);
+                        CreateTransactionHistory(account, null, amount, newBalance, TransactionType.Deposit, connection, transaction);
+
+                        transaction.Commit();
+
+                        account.Balance = newBalance;
                     }
-                    else
+                    catch (Exception ex)
                     {
+                        transaction.Rollback();
                         throw ex;
                     }
-                }
-                finally
-                {
-                    connection.Close();
+                    finally
+                    {
+                        connection.Close();
+                    }
                 }
             }
         }
 
-        public void Withdraw(Account account, decimal amount)
+        public void Withdraw(Account account, decimal amount, decimal newBalance)
         {
-            var query = @"EXEC [dbo].[usp_Withdraw] @AccountNo, @Balance, @RowVersion, @Amount";
-
             using (var connection = new SqlConnection(_connectionString))
-            using (var command = new SqlCommand(query, connection))
             {
-                try
-                {
-                    connection.Open();
+                connection.Open();
 
-                    command.Parameters.AddWithValue("@AccountNo", account.AccountNo);
-                    command.Parameters.AddWithValue("@Balance", account.Balance);
-                    command.Parameters.AddWithValue("@RowVersion", account.Version);
-                    command.Parameters.AddWithValue("@Amount", amount);
-
-                    var rows = command.ExecuteNonQuery();
-                }
-                catch (Exception ex)
+                using (var transaction = connection.BeginTransaction(System.Data.IsolationLevel.Serializable))
                 {
-                    if (ex.Message == "Data has been modified")
+                    try
                     {
-                        throw new DBConcurrencyException(ex.Message);
+                        GetAccount(account, connection, transaction);
+                        UpdateBalance(account, newBalance, connection, transaction);
+                        CreateTransactionHistory(account, null, amount, newBalance, TransactionType.Withdrawal, connection, transaction);
+
+                        transaction.Commit();
+
+                        account.Balance = newBalance;
                     }
-                    else
+                    catch (Exception ex)
                     {
+                        transaction.Rollback();
                         throw ex;
                     }
-                }
-                finally
-                {
-                    connection.Close();
+                    finally
+                    {
+                        connection.Close();
+                    }
                 }
             }
         }
 
-        public void FundTransfer(Account account, Account ReceivingAccount, decimal amount)
+        public void FundTransfer(
+            Account account,
+            decimal transferingAmount,
+            decimal accountNewBalance,
+            Account receivingAccount,
+            decimal receivingAmount,
+            decimal receivingAccountNewBalance)
         {
-            var query = @"EXEC [dbo].[usp_TransferFunds] 
-                            @AccountNo, 
-                            @Balance, 
-                            @RowVersion, 
-                            @DestinationAccountNo, 
-                            @DestinationBalance, 
-                            @DestinationRowVersion, 
-                            @Amount";
-
             using (var connection = new SqlConnection(_connectionString))
-            using (var command = new SqlCommand(query, connection))
             {
-                try
-                {
-                    connection.Open();
+                connection.Open();
 
-                    command.Parameters.AddWithValue("@AccountNo", account.AccountNo);
-                    command.Parameters.AddWithValue("@Balance", account.Balance);
-                    command.Parameters.AddWithValue("@RowVersion", account.Version);
-                    command.Parameters.AddWithValue("@DestinationAccountNo", ReceivingAccount.AccountNo);
-                    command.Parameters.AddWithValue("@DestinationBalance", ReceivingAccount.Balance);
-                    command.Parameters.AddWithValue("@DestinationRowVersion", ReceivingAccount.Version);
-                    command.Parameters.AddWithValue("@Amount", amount);
-
-                    var rows = command.ExecuteNonQuery();
-                }
-                catch (Exception ex)
+                using (var transaction = connection.BeginTransaction(System.Data.IsolationLevel.Serializable))
                 {
-                    if (ex.Message == "Data has been modified")
+                    try
                     {
-                        throw new DBConcurrencyException(ex.Message);
+                        GetAccount(account, connection, transaction);
+                        UpdateBalance(account, accountNewBalance, connection, transaction);
+                        CreateTransactionHistory(account, receivingAccount, transferingAmount, accountNewBalance, TransactionType.Transfer, connection, transaction);
+
+                        GetAccount(receivingAccount, connection, transaction);
+                        UpdateBalance(receivingAccount, receivingAccountNewBalance, connection, transaction);
+                        CreateTransactionHistory(receivingAccount, account, receivingAmount, receivingAccountNewBalance, TransactionType.Transfer, connection, transaction);
+
+                        transaction.Commit();
+
+                        account.Balance = accountNewBalance;
+                        receivingAccount.Balance = receivingAccountNewBalance;
                     }
-                    else
+                    catch (Exception ex)
                     {
+                        transaction.Rollback();
                         throw ex;
                     }
+                    finally
+                    {
+                        connection.Close();
+                    }
                 }
-                finally
+            }
+        }
+
+
+        public void GetAccount(Account account, SqlConnection connection, SqlTransaction transaction)
+        {
+            var lockAccount = "SELECT * FROM [dbo].[Account] WITH (UPDLOCK, ROWLOCK) WHERE AccountNo = @AccountNo AND Balance = @Balance";
+
+            using (var lockCommand = new SqlCommand(lockAccount, connection, transaction))
+            {
+                lockCommand.Parameters.AddWithValue("@AccountNo", account.AccountNo);
+                lockCommand.Parameters.AddWithValue("@Balance", account.Balance);
+
+                var reader = lockCommand.ExecuteReader();
+
+                if (reader.Read())
                 {
-                    connection.Close();
+                    reader.Close();
                 }
+                else
+                {
+                    reader.Close();
+                    throw new DBConcurrencyException("Balance has been updated. Please refresh.");
+                }
+            }
+        }
+
+        private void UpdateBalance(
+            Account account,
+            decimal newBalance,
+            SqlConnection connection,
+            SqlTransaction transaction)
+        {
+            var updateBalance = @"UPDATE [dbo].[Account] SET Balance = @NewBalance WHERE AccountNo = @AccountNo";
+
+            using (var command = new SqlCommand(updateBalance, connection, transaction))
+            {
+                command.Parameters.AddWithValue("@AccountNo", account.AccountNo);
+                command.Parameters.AddWithValue("@NewBalance", newBalance);
+
+                var rows = command.ExecuteNonQuery();
+
+                if (rows == 0)
+                {
+                    throw new DBConcurrencyException("Concurrency detected.");
+                }
+            }
+        }
+
+        private void CreateTransactionHistory(
+            Account account,
+            Account receivingAccount,
+            decimal amount,
+            decimal endBalance,
+            TransactionType type,
+            SqlConnection connection,
+            SqlTransaction transaction)
+        {
+            var tranasctionHistoryQuery = @"INSERT INTO [dbo].[Transaction]
+	                                        (
+	                                        	  AccountNo,
+	                                        	  FromToAccount,
+	                                        	  TransactionTypeId,
+	                                        	  Amount,
+	                                        	  EndBalance,
+	                                        	  TransactionDate
+	                                        )
+	                                        VALUES
+	                                        (
+	                                        	  @AccountNo,
+	                                        	  @ReceivingAccount,
+	                                        	  @TransactionId,
+	                                        	  @Amount,
+	                                        	  @EndBalance,
+	                                        	  @TransactionDate
+	                                        )";
+
+            using (var command = new SqlCommand(tranasctionHistoryQuery, connection, transaction))
+            {
+                command.Parameters.AddWithValue("@AccountNo", account.AccountNo);
+                if (receivingAccount != null)
+                    command.Parameters.AddWithValue("@ReceivingAccount", receivingAccount.AccountNo);
+                else
+                    command.Parameters.AddWithValue("@ReceivingAccount", DBNull.Value);
+                command.Parameters.AddWithValue("@TransactionId", (int)type);
+                command.Parameters.AddWithValue("@Amount", amount);
+                command.Parameters.AddWithValue("@EndBalance", endBalance);
+                command.Parameters.AddWithValue("@TransactionDate", DateTime.Now);
+
+                var rows = command.ExecuteNonQuery();
             }
         }
 
@@ -143,8 +223,7 @@ namespace WalletSystem.Data.Repository
         {
             var transactions = new List<Model.Transaction>();
 
-            var query = @"SET TRANSACTION ISOLATION LEVEL SERIALIZABLE
-                          SELECT
+            var query = @"SELECT
                           	  TransactionId,
                           	  FromToAccount,
                           	  TransactionTypeId,

@@ -1,9 +1,11 @@
 using NUnit.Framework;
 using System;
+using System.Collections.Generic;
 using System.Configuration;
 using System.Data;
 using System.Data.Common;
 using System.Data.SqlClient;
+using System.Linq;
 using System.Security.Principal;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,8 +21,6 @@ namespace WalletSystem.Test
         private AccountService _accountService;
 
         private string _accountNo = string.Empty;
-        private string _username = "username";
-        private string _password = "password";
 
         [SetUp]
         public void Setup()
@@ -32,41 +32,50 @@ namespace WalletSystem.Test
         [Test]
         public void CanCreateUser()
         {
-            CleanUp();
+            var username = "utc1";
+            var password = "123";
 
-            var account = CreateUserAccount(_username, _password);
+            CleanUp(username);
+
+            var account = CreateUserAccount(username, password);
 
             Assert.IsNotNull(account);
-            Assert.IsTrue(account.Username == _username);
+            Assert.IsTrue(account.Username == username);
             Assert.IsTrue(account.Balance == 0);
         }
 
         [Test]
         public void CanLogin()
         {
-            CleanUp();
+            var username = "utc2";
+            var password = "123";
 
-            var account = CreateUserAccount(_username, _password);
+            CleanUp(username);
+
+            var account = CreateUserAccount(username, password);
 
             Assert.IsNotNull(account);
-            Assert.IsTrue(account.Username == _username);
+            Assert.IsTrue(account.Username == username);
 
-            var loginAccount = _accountService.Login(_username, _password);
+            var loginAccount = _accountService.Login(username, password);
 
             Assert.IsNotNull(loginAccount);
-            Assert.IsTrue(loginAccount.Username == _username);
+            Assert.IsTrue(loginAccount.Username == username);
         }
 
         [Test]
         public void CanValidateThatUsernameAlreadyExists()
         {
-            CleanUp();
+            var username = "utc3";
+            var password = "123";
 
-            var account = CreateUserAccount(_username, _password);
+            CleanUp(username);
+
+            var account = CreateUserAccount(username, password);
 
             Assert.IsNotNull(account);
 
-            var exists = _accountService.UsernameExists(_username);
+            var exists = _accountService.UsernameExists(username);
 
             Assert.IsTrue(exists);
         }
@@ -74,9 +83,12 @@ namespace WalletSystem.Test
         [Test]
         public void CanValidateThatAccountExists()
         {
-            CleanUp();
+            var username = "utc4";
+            var password = "123";
 
-            var account = CreateUserAccount(_username, _password);
+            CleanUp(username);
+
+            var account = CreateUserAccount(username, password);
 
             Assert.IsNotNull(account);
 
@@ -88,16 +100,18 @@ namespace WalletSystem.Test
         [Test]
         public void CanDeposit()
         {
-            CleanUp();
+            var username = "utc5";
+            var password = "123";
+
+            CleanUp(username);
 
             var amount = 50000;
-            var account = CreateUserAccount(_username, _password);
+            var account = CreateUserAccount(username, password);
 
             Assert.IsNotNull(account);
             Assert.IsTrue(account.Balance == 0);
 
             _accountService.Deposit(account, amount);
-            _accountService.RefreshAccount(account);
 
             Assert.IsTrue(account.Balance == amount);
         }
@@ -105,24 +119,25 @@ namespace WalletSystem.Test
         [Test]
         public void CanWithdraw()
         {
+            var username = "utc6";
+            var password = "123";
+
+            CleanUp(username);
+
+            var account = CreateUserAccount(username, password);
+
             var amountToDeposit = 50000;
             var amountToWithdraw = 30000;
             var expectedEndBalance = amountToDeposit - amountToWithdraw;
-
-            CleanUp();
-
-            var account = CreateUserAccount(_username, _password);
 
             Assert.IsNotNull(account);
             Assert.IsTrue(account.Balance == 0);
 
             _accountService.Deposit(account, amountToDeposit);
-            _accountService.RefreshAccount(account);
 
             Assert.IsTrue(account.Balance == amountToDeposit);
 
             _accountService.Withdraw(account, amountToWithdraw);
-            _accountService.RefreshAccount(account);
 
             Assert.IsTrue(account.Balance == expectedEndBalance);
         }
@@ -130,17 +145,20 @@ namespace WalletSystem.Test
         [Test]
         public void CanTransferFunds()
         {
+            var username = "utc7";
+            var password = "123";
+            
             var amountToDeposit = 50000;
             var amountToTransfer = 15000;
             var expectedEndBalance = amountToDeposit - amountToTransfer;
 
-            var receiverUsername = "receiver";
+            var receiverUsername = "utc7_receiver";
             var receiverPassword = "password";
 
             CleanUp(receiverUsername);
-            CleanUp();
+            CleanUp(username);
 
-            var account = CreateUserAccount(_username, _password);
+            var account = CreateUserAccount(username, password);
             var receivingAccount = CreateUserAccount(receiverUsername, receiverPassword);
 
             Assert.IsNotNull(account);
@@ -148,13 +166,10 @@ namespace WalletSystem.Test
             Assert.IsTrue(receivingAccount.Balance == 0);
 
             _accountService.Deposit(account, amountToDeposit);
-            _accountService.RefreshBalance(account);
 
             Assert.IsTrue(account.Balance == amountToDeposit);
 
             _accountService.TransferFunds(account, receivingAccount, amountToTransfer);
-            _accountService.RefreshBalance(account);
-            _accountService.RefreshBalance(receivingAccount);
 
             Assert.IsTrue(account.Balance == expectedEndBalance);
             Assert.IsTrue(receivingAccount.Balance == amountToTransfer);
@@ -163,40 +178,23 @@ namespace WalletSystem.Test
         [Test]
         public void DepositConcurrencyTest()
         {
-            CleanUp();
+            var username = "utc8";
+            var password = "123";
 
-            var account = CreateUserAccount(_username, _password);
+            CleanUp(username);
 
-            Task desposit1 = Task.Factory.StartNew(() => _accountService.Deposit(account, 25000));
-            Task desposit2 = Task.Factory.StartNew(() => _accountService.Deposit(account, 10000));
+            var account = CreateUserAccount(username, password);
 
+            var numberOfThreads = 100;
+            var amount = 0;
+            
             try
             {
-                Task.WaitAll(desposit1, desposit2);
-
-                Assert.IsTrue(false);
-            }
-            catch (Exception ex) when (ex.InnerException is DBConcurrencyException)
-            {
-                Assert.IsTrue(true);
-            }
-        }
-
-        [Test]
-        public void WithdrawalAndDepositConcurrencyTest()
-        {
-            CleanUp();
-
-            var account = CreateUserAccount(_username, _password);
-
-            Task deposit = Task.Factory.StartNew(() => _accountService.Deposit(account, 25000));
-            Task withdraw = Task.Factory.StartNew(() => _accountService.Withdraw(account, 20000));
-
-            try
-            {
-                Task.WaitAll(deposit, withdraw);
-
-                Assert.IsTrue(false);
+                Parallel.ForEach(Enumerable.Range(0, numberOfThreads), (_) =>
+                {
+                    amount += 3;
+                    _accountService.Deposit(account, amount);
+                });
             }
             catch (Exception ex) when (ex.InnerException is DBConcurrencyException)
             {
@@ -207,19 +205,26 @@ namespace WalletSystem.Test
         [Test]
         public void WithdrawConcurrencyTest()
         {
-            CleanUp();
+            var username = "utc9";
+            var password = "123";
 
-            var account = CreateUserAccount(_username, _password);
+            CleanUp(username);
 
-            _accountService.Deposit(account, 50000);
-            _accountService.RefreshAccount(account);
+            var account = CreateUserAccount(username, password);
 
-            Task withdraw1 = Task.Factory.StartNew(() => _accountService.Withdraw(account, 25000));
-            Task withdraw2 = Task.Factory.StartNew(() => _accountService.Withdraw(account, 10000));
+            _accountService.Deposit(account, 5000000);
+
+            var numberOfThreads = 100;
+            var amount = 0;
 
             try
             {
-                Task.WaitAll(withdraw1, withdraw2);
+                Parallel.ForEach(Enumerable.Range(0, numberOfThreads), (_) =>
+                {
+                    amount += 5;
+
+                    _accountService.Withdraw(account, amount);
+                });
 
                 Assert.IsTrue(false);
             }
@@ -230,25 +235,73 @@ namespace WalletSystem.Test
         }
 
         [Test]
-        public void TransferFundsConcurrencyTest_TransferingAccountUpdated()
+        public void TransferFundsConcurrencyTest()
         {
-            var receiverUsername = "receiver";
+            var username = "utc10";
+            var password = "123";
+
+            var receiverUsername = "utc10_receiver";
             var receiverPassword = "password";
 
             CleanUp(receiverUsername);
-            CleanUp();
+            CleanUp(username);
 
-            var account = CreateUserAccount(_username, _password);
+            var account = CreateUserAccount(username, password);
+            var receivingAccount = CreateUserAccount(receiverUsername, receiverPassword);
+
+            _accountService.Deposit(account, 5000000);
+
+            var numberOfThreads = 100;
+            var amount = 0;
+            
+            try
+            {
+                Parallel.ForEach(Enumerable.Range(0, numberOfThreads), (_) =>
+                {
+                    amount += 7;
+
+                    _accountService.TransferFunds(account, receivingAccount, amount);
+                });
+
+                Assert.IsTrue(false);
+            }
+            catch (Exception ex) when (ex.InnerException is DBConcurrencyException)
+            {
+                Assert.IsTrue(true);
+            }
+        }
+
+
+        [Test]
+        public void MultipleTransactionsConcurrencyTest()
+        {
+            var username = "utc11";
+            var password = "123";
+
+            var receiverUsername = "utc11_receiver";
+            var receiverPassword = "password";
+
+            CleanUp(receiverUsername);
+            CleanUp(username);
+
+            var account = CreateUserAccount(username, password);
             var receivingAccount = CreateUserAccount(receiverUsername, receiverPassword);
 
             _accountService.Deposit(account, 50000);
 
-            Task deposit = Task.Factory.StartNew(() => _accountService.Deposit(account, 20000));
-            Task transfer1 = Task.Factory.StartNew(() => _accountService.TransferFunds(account, receivingAccount, 20000));
-
+            var numberOfThreads = 100;
+            var amount = 5;
+           
             try
             {
-                Task.WaitAll(deposit, transfer1);
+                Parallel.ForEach(Enumerable.Range(0, numberOfThreads), (_) =>
+                {
+                    amount += 10;
+
+                    _accountService.Deposit(account, amount);
+                    _accountService.Withdraw(account, amount);
+                    _accountService.TransferFunds(account, receivingAccount, amount);
+                });
 
                 Assert.IsTrue(false);
             }
@@ -258,66 +311,10 @@ namespace WalletSystem.Test
             }
         }
 
-        [Test]
-        public void TransferFundsConcurrencyTest_MultiTransfer()
+
+        public void CleanUp(string username)
         {
-            var receiverUsername = "receiver";
-            var receiverPassword = "password";
-
-            CleanUp(receiverUsername);
-            CleanUp();
-
-            var account = CreateUserAccount(_username, _password);
-            var receivingAccount = CreateUserAccount(receiverUsername, receiverPassword);
-
-            _accountService.Deposit(account, 50000);
-            _accountService.RefreshBalance(account);
-
-            Task transfer1 = Task.Factory.StartNew(() => _accountService.TransferFunds(account, receivingAccount, 20000));
-            Task transfer2 = Task.Factory.StartNew(() => _accountService.TransferFunds(account, receivingAccount, 10000));
-
-            try
-            {
-                Task.WaitAll(transfer1, transfer2);
-
-                Assert.IsTrue(false);
-            }
-            catch (Exception ex) when (ex.InnerException is DBConcurrencyException)
-            {
-                Assert.IsTrue(true);
-            }
-        }
-
-        [Test]
-        public void TransferFundsConcurrencyTest_ReceivingAccountUpdated()
-        {
-            var receiverUsername = "receiver";
-            var receiverPassword = "password";
-
-            CleanUp(receiverUsername);
-            CleanUp();
-
-            var account = CreateUserAccount(_username, _password);
-            var receivingAccount = CreateUserAccount(receiverUsername, receiverPassword);
-
-            Task deposit = Task.Factory.StartNew(() => _accountService.Deposit(receivingAccount, 10000));
-            Task transfer = Task.Factory.StartNew(() => _accountService.TransferFunds(account, receivingAccount, 25000));
-
-            try
-            {
-                Task.WaitAll(deposit, transfer);
-
-                Assert.IsTrue(false);
-            }
-            catch (Exception ex) when (ex.InnerException is DBConcurrencyException)
-            {
-                Assert.IsTrue(true);
-            }
-        }
-
-        public void CleanUp(string username = null)
-        {
-            var query = $@"DECLARE @AccountNo BIGINT = (SELECT AccountNo FROM [dbo].[Account] WHERE Username = '{(string.IsNullOrEmpty(username) ? _username : username)}')
+            var query = $@"DECLARE @AccountNo BIGINT = (SELECT AccountNo FROM [dbo].[Account] WHERE Username = '{username}')
                            DELETE FROM [dbo].[Transaction] WHERE AccountNo = @AccountNo OR FromToAccount = @AccountNo
                            DELETE FROM [dbo].[Account] WHERE AccountNo = @AccountNo";
 

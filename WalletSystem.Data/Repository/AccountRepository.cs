@@ -25,8 +25,7 @@ namespace WalletSystem.Data.Repository
                               AccountNo,
                               Username,
                               Balance,
-                              CreatedDate,
-                              Version
+                              CreatedDate
                           FROM 
                               [dbo].[Account]
                           WHERE
@@ -53,9 +52,8 @@ namespace WalletSystem.Data.Repository
                             AccountNo = Convert.ToInt64(reader["AccountNo"]),
                             Username = username,
                             Balance = Convert.ToDecimal(reader["Balance"]),
-                            CreatedDate = Convert.ToDateTime(reader["CreatedDate"]),
-                            Version = reader["Version"] as byte[]
-                        };
+                            CreatedDate = Convert.ToDateTime(reader["CreatedDate"])
+                    };
                     }
 
                 }
@@ -82,8 +80,7 @@ namespace WalletSystem.Data.Repository
                               AccountNo,
                               Username,
                               Balance,
-                              CreatedDate,
-                              Version
+                              CreatedDate
                           FROM 
                               [dbo].[Account]
                           WHERE
@@ -108,9 +105,8 @@ namespace WalletSystem.Data.Repository
                             AccountNo = Convert.ToInt64(reader["AccountNo"]),
                             Username = reader["Username"].ToString(),
                             Balance = Convert.ToDecimal(reader["Balance"]),
-                            CreatedDate = Convert.ToDateTime(reader["CreatedDate"]),
-                            Version = reader["Version"] as byte[]
-                        };
+                            CreatedDate = Convert.ToDateTime(reader["CreatedDate"])
+                    };
                     }
 
                 }
@@ -147,7 +143,6 @@ namespace WalletSystem.Data.Repository
                     while (reader.Read())
                     {
                         account.Balance = Convert.ToDecimal(reader["Balance"]);
-                        account.Version = reader["Version"] as byte[];
                     }
                 }
                 catch (Exception ex)
@@ -189,7 +184,6 @@ namespace WalletSystem.Data.Repository
                         account.AccountNo = Convert.ToInt64(reader["AccountNo"]);
                         account.Balance = Convert.ToDecimal(reader["Balance"]);
                         account.CreatedDate = Convert.ToDateTime(reader["CreatedDate"]);
-                        account.Version = reader["Version"] as byte[];
                     }
                 }
                 catch (Exception ex)
