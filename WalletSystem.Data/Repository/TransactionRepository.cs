@@ -68,7 +68,7 @@ namespace WalletSystem.Data.Repository
                         var currentBalance = GetAccountBalance(accountNo, connection, transaction);
                         var newBalance = currentBalance - amount;
 
-                        if (newBalance > 0)
+                        if (newBalance >= 0)
                         {
                             UpdateBalance(accountNo, newBalance, connection, transaction);
                             CreateTransactionHistory(accountNo, null, -amount, newBalance, TransactionType.Withdrawal, connection, transaction);
@@ -112,7 +112,7 @@ namespace WalletSystem.Data.Repository
                         var currentBalance = GetAccountBalance(accountNo, connection, transaction);
                         var newBalance = currentBalance - amount;
 
-                        if (newBalance > 0)
+                        if (newBalance >= 0)
                         {
                             UpdateBalance(accountNo, newBalance, connection, transaction);
                             CreateTransactionHistory(accountNo, null, -amount, newBalance, TransactionType.Transfer, connection, transaction);
@@ -144,39 +144,6 @@ namespace WalletSystem.Data.Repository
                     }
                 }
             }
-
-            //using (var connection = new SqlConnection(_connectionString))
-            //{
-            //    connection.Open();
-
-            //    using (var transaction = connection.BeginTransaction(System.Data.IsolationLevel.ReadCommitted))
-            //    {
-            //        try
-            //        {
-            //            GetAccountBalance(account, connection, transaction);
-            //            UpdateBalance(account, accountNewBalance, connection, transaction);
-            //            CreateTransactionHistory(account, receivingAccount, transferingAmount, accountNewBalance, TransactionType.Transfer, connection, transaction);
-
-            //            GetAccountBalance(receivingAccount, connection, transaction);
-            //            UpdateBalance(receivingAccount, receivingAccountNewBalance, connection, transaction);
-            //            CreateTransactionHistory(receivingAccount, account, receivingAmount, receivingAccountNewBalance, TransactionType.Transfer, connection, transaction);
-
-            //            transaction.Commit();
-
-            //            account.Balance = accountNewBalance;
-            //            receivingAccount.Balance = receivingAccountNewBalance;
-            //        }
-            //        catch (Exception ex)
-            //        {
-            //            transaction.Rollback();
-            //            throw ex;
-            //        }
-            //        finally
-            //        {
-            //            connection.Close();
-            //        }
-            //    }
-            //}
         }
 
         public decimal GetAccountBalance(long accountNo, SqlConnection connection, SqlTransaction transaction)
