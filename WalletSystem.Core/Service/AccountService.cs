@@ -44,23 +44,12 @@ namespace WalletSystem.Core.Service
         public void RefreshBalance(Account account) => _accountRepository.RefreshBalance(account);
 
         public void Deposit(Account account, decimal amount) => 
-            _transactionRepository.Deposit(
-                account, 
-                amount); 
+            account.Balance = _transactionRepository.Deposit(account.AccountNo, amount); 
 
         public void Withdraw(Account account, decimal amount) => 
-            _transactionRepository.Withdraw(
-                account, 
-                -amount, 
-                account.Balance + -amount);
+            account.Balance = _transactionRepository.Withdraw(account.AccountNo, amount);
 
-        public void TransferFunds(Account account, Account receivingAccount, decimal amount) =>
-            _transactionRepository.FundTransfer(
-                account,
-                -amount,
-                account.Balance + -amount, 
-                receivingAccount,
-                amount,
-                receivingAccount.Balance + amount);
+        public void TransferFunds(Account account, Account receivingAccount, decimal amount) => 
+            account.Balance = _transactionRepository.FundTransfer(account.AccountNo, receivingAccount.AccountNo, amount);
     }
 }

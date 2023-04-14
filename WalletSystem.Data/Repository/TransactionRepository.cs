@@ -22,26 +22,25 @@ namespace WalletSystem.Data.Repository
             _connectionString = ConfigurationManager.ConnectionStrings["WalletSystem"].ConnectionString;
         }
 
-        public void Deposit(Account account, decimal amount)
+        public decimal Deposit(long accountNo, decimal amount)
         {
             using (var connection = new SqlConnection(_connectionString))
             {
                 connection.Open();
 
-                using (var transaction = connection.BeginTransaction(System.Data.IsolationLevel.Serializable))
+                using (var transaction = connection.BeginTransaction(System.Data.IsolationLevel.ReadCommitted))
                 {
                     try
                     {
-                        GetAccount(account, connection, transaction);
+                        var currentBalance = GetAccountBalance(accountNo, connection, transaction);
+                        var newBalance = currentBalance + amount;
 
-                        var newBalance = account.Balance + amount;
-
-                        UpdateBalance(account, newBalance, connection, transaction);
-                        CreateTransactionHistory(account, null, amount, newBalance, TransactionType.Deposit, connection, transaction);
+                        UpdateBalance(accountNo, newBalance, connection, transaction);
+                        CreateTransactionHistory(accountNo, null, amount, newBalance, TransactionType.Deposit, connection, transaction);
 
                         transaction.Commit();
 
-                        account.Balance = newBalance;
+                        return newBalance;
                     }
                     catch (Exception ex)
                     {
@@ -56,23 +55,33 @@ namespace WalletSystem.Data.Repository
             }
         }
 
-        public void Withdraw(Account account, decimal amount, decimal newBalance)
+        public decimal Withdraw(long accountNo, decimal amount)
         {
             using (var connection = new SqlConnection(_connectionString))
             {
                 connection.Open();
 
-                using (var transaction = connection.BeginTransaction(System.Data.IsolationLevel.Serializable))
+                using (var transaction = connection.BeginTransaction(System.Data.IsolationLevel.ReadCommitted))
                 {
                     try
                     {
-                        GetAccount(account, connection, transaction);
-                        UpdateBalance(account, newBalance, connection, transaction);
-                        CreateTransactionHistory(account, null, amount, newBalance, TransactionType.Withdrawal, connection, transaction);
+                        var currentBalance = GetAccountBalance(accountNo, connection, transaction);
+                        var newBalance = currentBalance - amount;
 
-                        transaction.Commit();
+                        if (newBalance > 0)
+                        {
+                            UpdateBalance(accountNo, newBalance, connection, transaction);
+                            CreateTransactionHistory(accountNo, null, -amount, newBalance, TransactionType.Withdrawal, connection, transaction);
 
-                        account.Balance = newBalance;
+                            transaction.Commit();
+
+                            return newBalance;
+                        }
+                        else
+                        {
+                            transaction.Rollback();
+                            throw new ArgumentOutOfRangeException("Insufficient funds");
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -87,34 +96,42 @@ namespace WalletSystem.Data.Repository
             }
         }
 
-        public void FundTransfer(
-            Account account,
-            decimal transferingAmount,
-            decimal accountNewBalance,
-            Account receivingAccount,
-            decimal receivingAmount,
-            decimal receivingAccountNewBalance)
+        public decimal FundTransfer(
+            long accountNo,
+            long receivingAccountNo,
+            decimal amount)
         {
             using (var connection = new SqlConnection(_connectionString))
             {
                 connection.Open();
 
-                using (var transaction = connection.BeginTransaction(System.Data.IsolationLevel.Serializable))
+                using (var transaction = connection.BeginTransaction(System.Data.IsolationLevel.ReadCommitted))
                 {
                     try
                     {
-                        GetAccount(account, connection, transaction);
-                        UpdateBalance(account, accountNewBalance, connection, transaction);
-                        CreateTransactionHistory(account, receivingAccount, transferingAmount, accountNewBalance, TransactionType.Transfer, connection, transaction);
+                        var currentBalance = GetAccountBalance(accountNo, connection, transaction);
+                        var newBalance = currentBalance - amount;
 
-                        GetAccount(receivingAccount, connection, transaction);
-                        UpdateBalance(receivingAccount, receivingAccountNewBalance, connection, transaction);
-                        CreateTransactionHistory(receivingAccount, account, receivingAmount, receivingAccountNewBalance, TransactionType.Transfer, connection, transaction);
+                        if (newBalance > 0)
+                        {
+                            UpdateBalance(accountNo, newBalance, connection, transaction);
+                            CreateTransactionHistory(accountNo, null, -amount, newBalance, TransactionType.Transfer, connection, transaction);
 
-                        transaction.Commit();
+                            var receivingAccountBalance = GetAccountBalance(receivingAccountNo, connection, transaction);
+                            var receivingAccountNewBalance = receivingAccountBalance + amount;
 
-                        account.Balance = accountNewBalance;
-                        receivingAccount.Balance = receivingAccountNewBalance;
+                            UpdateBalance(receivingAccountNo, receivingAccountNewBalance, connection, transaction);
+                            CreateTransactionHistory(receivingAccountNo, accountNo, amount, receivingAccountNewBalance, TransactionType.Transfer, connection, transaction);
+
+                            transaction.Commit();
+
+                            return newBalance;
+                        }
+                        else
+                        {
+                            transaction.Rollback();
+                            throw new ArgumentOutOfRangeException("Insufficient funds");
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -127,34 +144,65 @@ namespace WalletSystem.Data.Repository
                     }
                 }
             }
+
+            //using (var connection = new SqlConnection(_connectionString))
+            //{
+            //    connection.Open();
+
+            //    using (var transaction = connection.BeginTransaction(System.Data.IsolationLevel.ReadCommitted))
+            //    {
+            //        try
+            //        {
+            //            GetAccountBalance(account, connection, transaction);
+            //            UpdateBalance(account, accountNewBalance, connection, transaction);
+            //            CreateTransactionHistory(account, receivingAccount, transferingAmount, accountNewBalance, TransactionType.Transfer, connection, transaction);
+
+            //            GetAccountBalance(receivingAccount, connection, transaction);
+            //            UpdateBalance(receivingAccount, receivingAccountNewBalance, connection, transaction);
+            //            CreateTransactionHistory(receivingAccount, account, receivingAmount, receivingAccountNewBalance, TransactionType.Transfer, connection, transaction);
+
+            //            transaction.Commit();
+
+            //            account.Balance = accountNewBalance;
+            //            receivingAccount.Balance = receivingAccountNewBalance;
+            //        }
+            //        catch (Exception ex)
+            //        {
+            //            transaction.Rollback();
+            //            throw ex;
+            //        }
+            //        finally
+            //        {
+            //            connection.Close();
+            //        }
+            //    }
+            //}
         }
 
-
-        public void GetAccount(Account account, SqlConnection connection, SqlTransaction transaction)
+        public decimal GetAccountBalance(long accountNo, SqlConnection connection, SqlTransaction transaction)
         {
-            var lockAccount = "SELECT * FROM [dbo].[Account] WITH (UPDLOCK, ROWLOCK) WHERE AccountNo = @AccountNo AND Balance = @Balance";
+            var lockAccount = "SELECT Balance FROM [dbo].[Account] WITH (UPDLOCK) WHERE AccountNo = @AccountNo";
 
             using (var lockCommand = new SqlCommand(lockAccount, connection, transaction))
             {
-                lockCommand.Parameters.AddWithValue("@AccountNo", account.AccountNo);
-                lockCommand.Parameters.AddWithValue("@Balance", account.Balance);
+                lockCommand.Parameters.AddWithValue("@AccountNo", accountNo);
 
-                var reader = lockCommand.ExecuteReader();
-
-                if (reader.Read())
+                using (var reader = lockCommand.ExecuteReader())
                 {
-                    reader.Close();
-                }
-                else
-                {
-                    reader.Close();
-                    throw new DBConcurrencyException("Balance has been updated. Please refresh.");
+                    if (reader.Read())
+                    {
+                        return Convert.ToDecimal(reader["Balance"]);
+                    }
+                    else
+                    {
+                        throw new Exception("Account not found");
+                    }
                 }
             }
         }
 
         private void UpdateBalance(
-            Account account,
+            long accountNo,
             decimal newBalance,
             SqlConnection connection,
             SqlTransaction transaction)
@@ -163,7 +211,7 @@ namespace WalletSystem.Data.Repository
 
             using (var command = new SqlCommand(updateBalance, connection, transaction))
             {
-                command.Parameters.AddWithValue("@AccountNo", account.AccountNo);
+                command.Parameters.AddWithValue("@AccountNo", accountNo);
                 command.Parameters.AddWithValue("@NewBalance", newBalance);
 
                 var rows = command.ExecuteNonQuery();
@@ -176,8 +224,8 @@ namespace WalletSystem.Data.Repository
         }
 
         private void CreateTransactionHistory(
-            Account account,
-            Account receivingAccount,
+            long accountNo,
+            long? receivingAccountNo,
             decimal amount,
             decimal endBalance,
             TransactionType type,
@@ -205,9 +253,9 @@ namespace WalletSystem.Data.Repository
 
             using (var command = new SqlCommand(tranasctionHistoryQuery, connection, transaction))
             {
-                command.Parameters.AddWithValue("@AccountNo", account.AccountNo);
-                if (receivingAccount != null)
-                    command.Parameters.AddWithValue("@ReceivingAccount", receivingAccount.AccountNo);
+                command.Parameters.AddWithValue("@AccountNo", accountNo);
+                if (receivingAccountNo.HasValue)
+                    command.Parameters.AddWithValue("@ReceivingAccount", receivingAccountNo);
                 else
                     command.Parameters.AddWithValue("@ReceivingAccount", DBNull.Value);
                 command.Parameters.AddWithValue("@TransactionId", (int)type);

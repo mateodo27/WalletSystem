@@ -147,7 +147,7 @@ namespace WalletSystem.Test
         {
             var username = "utc7";
             var password = "123";
-            
+
             var amountToDeposit = 50000;
             var amountToTransfer = 15000;
             var expectedEndBalance = amountToDeposit - amountToTransfer;
@@ -186,20 +186,17 @@ namespace WalletSystem.Test
             var account = CreateUserAccount(username, password);
 
             var numberOfThreads = 100;
-            var amount = 0;
-            
-            try
+            var amount = 1000;
+            var totalAmount = amount * numberOfThreads;
+
+            Parallel.ForEach(Enumerable.Range(0, numberOfThreads), (_) =>
             {
-                Parallel.ForEach(Enumerable.Range(0, numberOfThreads), (_) =>
-                {
-                    amount += 3;
-                    _accountService.Deposit(account, amount);
-                });
-            }
-            catch (Exception ex) when (ex.InnerException is DBConcurrencyException)
-            {
-                Assert.IsTrue(true);
-            }
+                _accountService.Deposit(account, amount);
+            });
+
+            _accountService.RefreshBalance(account);
+
+            Assert.IsTrue(account.Balance == totalAmount);
         }
 
         [Test]
@@ -212,26 +209,22 @@ namespace WalletSystem.Test
 
             var account = CreateUserAccount(username, password);
 
-            _accountService.Deposit(account, 5000000);
+            var initialDeposit = 500000;
+            _accountService.Deposit(account, initialDeposit);
 
-            var numberOfThreads = 100;
-            var amount = 0;
+            var numberOfThreads = 75;
+            var amount = 1200;
+            var totalAmount = amount * numberOfThreads;
+            var expectedEndBalance = initialDeposit - totalAmount;
 
-            try
+            Parallel.ForEach(Enumerable.Range(0, numberOfThreads), (_) =>
             {
-                Parallel.ForEach(Enumerable.Range(0, numberOfThreads), (_) =>
-                {
-                    amount += 5;
+                _accountService.Withdraw(account, amount);
+            });
 
-                    _accountService.Withdraw(account, amount);
-                });
+            _accountService.RefreshBalance(account);
 
-                Assert.IsTrue(false);
-            }
-            catch (Exception ex) when (ex.InnerException is DBConcurrencyException)
-            {
-                Assert.IsTrue(true);
-            }
+            Assert.IsTrue(account.Balance == expectedEndBalance);
         }
 
         [Test]
@@ -249,36 +242,34 @@ namespace WalletSystem.Test
             var account = CreateUserAccount(username, password);
             var receivingAccount = CreateUserAccount(receiverUsername, receiverPassword);
 
-            _accountService.Deposit(account, 5000000);
+            var initialDeposit = 500000;
+            _accountService.Deposit(account, initialDeposit);
 
-            var numberOfThreads = 100;
-            var amount = 0;
-            
-            try
+            var numberOfThreads = 150;
+            var amount = 1500;
+            var totalAmount = amount * numberOfThreads;
+            var expectedEndBalance = initialDeposit - totalAmount;
+
+            Parallel.ForEach(Enumerable.Range(0, numberOfThreads), (_) =>
             {
-                Parallel.ForEach(Enumerable.Range(0, numberOfThreads), (_) =>
-                {
-                    amount += 7;
+                _accountService.TransferFunds(account, receivingAccount, amount);
+            });
 
-                    _accountService.TransferFunds(account, receivingAccount, amount);
-                });
+            _accountService.RefreshBalance(account);
+            _accountService.RefreshBalance(receivingAccount);
 
-                Assert.IsTrue(false);
-            }
-            catch (Exception ex) when (ex.InnerException is DBConcurrencyException)
-            {
-                Assert.IsTrue(true);
-            }
+            Assert.IsTrue(account.Balance == expectedEndBalance);
+            Assert.IsTrue(receivingAccount.Balance == totalAmount);
         }
 
 
         [Test]
         public void MultipleTransactionsConcurrencyTest()
         {
-            var username = "utc11";
+            var username = "utc10";
             var password = "123";
 
-            var receiverUsername = "utc11_receiver";
+            var receiverUsername = "utc10_receiver";
             var receiverPassword = "password";
 
             CleanUp(receiverUsername);
@@ -287,28 +278,31 @@ namespace WalletSystem.Test
             var account = CreateUserAccount(username, password);
             var receivingAccount = CreateUserAccount(receiverUsername, receiverPassword);
 
-            _accountService.Deposit(account, 50000);
+            var initialDeposit = 500000;
+            _accountService.Deposit(account, initialDeposit);
 
-            var numberOfThreads = 100;
-            var amount = 5;
-           
-            try
+            var numberOfThreads = 150;
+            var amountToDeposit = 1500;
+            var amountToWithdraw = 1000;
+            var amountToTransfer = 750;
+            var totalDeposit = (amountToDeposit * numberOfThreads) + initialDeposit;
+            var totalWithdrawal = (amountToWithdraw * numberOfThreads);
+            var totalTransfer = (amountToTransfer * numberOfThreads);
+            var totalDeductedAmount = totalWithdrawal + totalTransfer;
+            var expectedEndBalance = totalDeposit - totalDeductedAmount;
+
+            Parallel.ForEach(Enumerable.Range(0, numberOfThreads), (_) =>
             {
-                Parallel.ForEach(Enumerable.Range(0, numberOfThreads), (_) =>
-                {
-                    amount += 10;
+                _accountService.Deposit(account, amountToDeposit);
+                _accountService.Withdraw(account, amountToWithdraw);
+                _accountService.TransferFunds(account, receivingAccount, amountToTransfer);
+            });
 
-                    _accountService.Deposit(account, amount);
-                    _accountService.Withdraw(account, amount);
-                    _accountService.TransferFunds(account, receivingAccount, amount);
-                });
+            _accountService.RefreshBalance(account);
+            _accountService.RefreshBalance(receivingAccount);
 
-                Assert.IsTrue(false);
-            }
-            catch (Exception ex) when (ex.InnerException is DBConcurrencyException)
-            {
-                Assert.IsTrue(true);
-            }
+            Assert.IsTrue(account.Balance == expectedEndBalance);
+            Assert.IsTrue(receivingAccount.Balance == totalTransfer);
         }
 
 
