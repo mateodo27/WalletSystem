@@ -171,6 +171,8 @@ namespace WalletSystem.Test
 
             _accountService.TransferFunds(account, receivingAccount, amountToTransfer);
 
+            _accountService.RefreshBalance(receivingAccount);
+
             Assert.IsTrue(account.Balance == expectedEndBalance);
             Assert.IsTrue(receivingAccount.Balance == amountToTransfer);
         }
