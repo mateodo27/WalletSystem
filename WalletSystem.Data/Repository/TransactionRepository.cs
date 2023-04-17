@@ -28,7 +28,7 @@ namespace WalletSystem.Data.Repository
             {
                 connection.Open();
 
-                using (var transaction = connection.BeginTransaction(System.Data.IsolationLevel.RepeatableRead))
+                using (var transaction = connection.BeginTransaction())
                 {
                     try
                     {
@@ -61,7 +61,7 @@ namespace WalletSystem.Data.Repository
             {
                 connection.Open();
 
-                using (var transaction = connection.BeginTransaction(System.Data.IsolationLevel.RepeatableRead))
+                using (var transaction = connection.BeginTransaction())
                 {
                     try
                     {
@@ -105,7 +105,7 @@ namespace WalletSystem.Data.Repository
             {
                 connection.Open();
 
-                using (var transaction = connection.BeginTransaction(System.Data.IsolationLevel.RepeatableRead))
+                using (var transaction = connection.BeginTransaction())
                 {
                     try
                     {
